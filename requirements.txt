@@ -1,0 +1,19 @@
+# Data & ML
+yfinance==1.1.0
+pandas==3.0.0
+numpy==2.4.2
+scikit-learn==1.8.0
+matplotlib==3.10.8
+seaborn==0.13.2
+joblib==1.5.3
+
+# Deep Learning
+tensorflow==2.20.0
+
+# API
+fastapi==0.129.0
+uvicorn==0.41.0
+pydantic==2.12.5
+
+# AWS (carregamento do modelo via S3 em produção)
+boto3==1.42.51

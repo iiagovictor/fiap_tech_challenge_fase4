@@ -1,0 +1,508 @@
+name: '2 - [PROD] Deploy Infra AWS'
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      python_version: ${{ steps.vars.outputs.python_version }}
+      aws_region: ${{ steps.vars.outputs.aws_region }}
+      aws_account_id: ${{ steps.vars.outputs.aws_account_id }}
+      s3_bucket: ${{ steps.vars.outputs.s3_bucket }}
+      s3_key: ${{ steps.vars.outputs.s3_key }}
+      backend_region: ${{ steps.vars.outputs.backend_region }}
+      tf_destroy: ${{ steps.vars.outputs.tf_destroy }}
+      ecr_repo: ${{ steps.vars.outputs.ecr_repo }}
+      ecs_cluster: ${{ steps.vars.outputs.ecs_cluster }}
+      ecs_service: ${{ steps.vars.outputs.ecs_service }}
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+      models_s3_prefix: ${{ steps.vars.outputs.models_s3_prefix }}
+      models_local_dir: ${{ steps.vars.outputs.models_local_dir }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install yq and read config.yaml variables
+        id: vars
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/download/v4.43.1/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          echo "python_version=$(yq '.setup.python_version // "3.11"' config.yaml)" >> $GITHUB_OUTPUT
+          echo "aws_region=$(yq '.aws.region' config.yaml)" >> $GITHUB_OUTPUT
+          echo "aws_account_id=$(yq '.terraform.backend.account_id' config.yaml)" >> $GITHUB_OUTPUT
+          echo "s3_bucket=$(yq '.terraform.backend.s3_bucket' config.yaml)" >> $GITHUB_OUTPUT
+          echo "s3_key=$(yq '.terraform.backend.key' config.yaml)" >> $GITHUB_OUTPUT
+          echo "backend_region=$(yq '.terraform.backend.region // .aws.region' config.yaml)" >> $GITHUB_OUTPUT
+          echo "tf_destroy=$(yq '.terraform.destroy' config.yaml)" >> $GITHUB_OUTPUT
+          echo "ecr_repo=$(yq '.ecr.repository // "lstm-stock-api"' config.yaml)" >> $GITHUB_OUTPUT
+          echo "ecs_cluster=$(yq '.ecs.cluster // "lstm-stock-api-prod-cluster"' config.yaml)" >> $GITHUB_OUTPUT
+          echo "ecs_service=$(yq '.ecs.service // "lstm-stock-api-prod-service"' config.yaml)" >> $GITHUB_OUTPUT
+          echo "image_tag=$(echo $GITHUB_SHA | cut -c1-8)" >> $GITHUB_OUTPUT
+          echo "models_s3_prefix=$(yq '.models.s3_key_prefix // "models"' config.yaml)" >> $GITHUB_OUTPUT
+          echo "models_local_dir=$(yq '.models.local_dir // "models"' config.yaml)" >> $GITHUB_OUTPUT
+
+      - name: Validate required variables
+        run: |
+          EXIT_CODE=0
+          
+          if [ -z "${{ steps.vars.outputs.python_version }}" ]; then
+            echo "❌ Erro: python_version é obrigatório"
+            EXIT_CODE=1
+          else
+            echo "✅ python_version: ${{ steps.vars.outputs.python_version }}"
+          fi
+          
+          if [ -z "${{ steps.vars.outputs.aws_region }}" ]; then
+            echo "❌ Erro: aws_region é obrigatório"
+            EXIT_CODE=1
+          else
+            echo "✅ aws_region: ${{ steps.vars.outputs.aws_region }}"
+          fi
+          
+          if [ -z "${{ steps.vars.outputs.aws_account_id }}" ]; then
+            echo "❌ Erro: terraform.backend.account_id é obrigatório"
+            EXIT_CODE=1
+          else
+            echo "✅ aws_account_id: ${{ steps.vars.outputs.aws_account_id }}"
+          fi
+          
+          if [ -z "${{ steps.vars.outputs.s3_bucket }}" ]; then
+            echo "❌ Erro: terraform.backend.s3_bucket é obrigatório"
+            EXIT_CODE=1
+          else
+            echo "✅ s3_bucket: ${{ steps.vars.outputs.s3_bucket }}"
+          fi
+          
+          if [ -z "${{ steps.vars.outputs.s3_key }}" ]; then
+            echo "❌ Erro: terraform.backend.key é obrigatório"
+            EXIT_CODE=1
+          else
+            echo "✅ s3_key: ${{ steps.vars.outputs.s3_key }}"
+          fi
+          
+          if [ -z "${{ steps.vars.outputs.backend_region }}" ]; then
+            echo "❌ Erro: terraform.backend.region é obrigatório"
+            EXIT_CODE=1
+          else
+            echo "✅ backend_region: ${{ steps.vars.outputs.backend_region }}"
+          fi
+          
+          if [ -z "${{ steps.vars.outputs.tf_destroy }}" ]; then
+            echo "⚠️  Aviso: terraform.destroy não definido, usando false como padrão"
+            echo "tf_destroy=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ tf_destroy: ${{ steps.vars.outputs.tf_destroy }}"
+          fi
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "❌ Validação falhou! Verifique o arquivo config.yaml."
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ Todas as variáveis obrigatórias validadas com sucesso!"
+
+  build_push_ecr:
+    needs: setup
+    if: ${{ needs.setup.outputs.tf_destroy != 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.build.outputs.image_uri }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ needs.setup.outputs.aws_region }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Create Terraform Backend Configuration
+        run: |
+          cd infra
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket  = "${{ needs.setup.outputs.s3_bucket }}"
+              key     = "${{ needs.setup.outputs.s3_key }}"
+              region  = "${{ needs.setup.outputs.backend_region }}"
+              encrypt = true
+            }
+          }
+          EOF
+
+      - name: Terraform Init
+        run: cd infra && terraform init
+
+      - name: Create ECR repository (targeted apply)
+        run: |
+          cd infra
+          terraform apply -auto-approve -input=false \
+            -target=aws_ecr_repository.main \
+            -var-file="inventories/prod.tfvars" \
+            -var="aws_region=${{ needs.setup.outputs.aws_region }}"
+          echo "✅ Repositório ECR pronto"
+
+      - name: Login to Amazon ECR
+        id: ecr_login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag and push Docker image
+        id: build
+        env:
+          REGISTRY:   ${{ steps.ecr_login.outputs.registry }}
+          REPOSITORY: ${{ needs.setup.outputs.ecr_repo }}
+          IMAGE_TAG:  ${{ needs.setup.outputs.image_tag }}
+        run: |
+          IMAGE_URI="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
+          docker build -t "$IMAGE_URI" .
+          docker tag  "$IMAGE_URI" "$REGISTRY/$REPOSITORY:latest"
+          docker push "$IMAGE_URI"
+          docker push "$REGISTRY/$REPOSITORY:latest"
+          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "✅ Imagem publicada: $IMAGE_URI"
+
+  upload_models_s3:
+    needs: setup
+    if: ${{ needs.setup.outputs.tf_destroy != 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      models_bucket: ${{ steps.bucket.outputs.name }}
+    steps:
+      - name: Checkout repository (with Git LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ needs.setup.outputs.aws_region }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Create Terraform Backend Configuration
+        run: |
+          cd infra
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket  = "${{ needs.setup.outputs.s3_bucket }}"
+              key     = "${{ needs.setup.outputs.s3_key }}"
+              region  = "${{ needs.setup.outputs.backend_region }}"
+              encrypt = true
+            }
+          }
+          EOF
+
+      - name: Terraform Init
+        run: cd infra && terraform init
+
+      - name: Create S3 models bucket (targeted apply)
+        id: bucket
+        run: |
+          cd infra
+          terraform apply -auto-approve -input=false \
+            -target=aws_s3_bucket.models \
+            -target=aws_s3_bucket_versioning.models \
+            -target=aws_s3_bucket_server_side_encryption_configuration.models \
+            -target=aws_s3_bucket_public_access_block.models \
+            -var-file="inventories/prod.tfvars" \
+            -var="aws_region=${{ needs.setup.outputs.aws_region }}"
+
+          BUCKET=$(terraform output -raw models_s3_bucket)
+          echo "name=$BUCKET" >> $GITHUB_OUTPUT
+          echo "✅ Bucket S3 para modelos: $BUCKET"
+
+      - name: Validate model artefacts exist
+        env:
+          LOCAL_DIR: ${{ needs.setup.outputs.models_local_dir }}
+        run: |
+          EXIT_CODE=0
+          echo "🔍 Verificando artefatos do modelo em $LOCAL_DIR/..."
+
+          for f in lstm_stock_model.h5 scaler.pkl; do
+            if [ ! -f "$LOCAL_DIR/$f" ]; then
+              echo "❌ Ausente: $LOCAL_DIR/$f"
+              EXIT_CODE=1
+            else
+              SIZE=$(du -h "$LOCAL_DIR/$f" | cut -f1)
+              echo "✅ Encontrado: $LOCAL_DIR/$f ($SIZE)"
+            fi
+          done
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "❌ Um ou mais artefatos do modelo estão ausentes."
+            echo "   Execute o notebook pre-work.ipynb — os arquivos são salvos automaticamente em $LOCAL_DIR/"
+            exit 1
+          fi
+
+      - name: Upload model artefacts to S3
+        env:
+          BUCKET: ${{ steps.bucket.outputs.name }}
+          PREFIX: ${{ needs.setup.outputs.models_s3_prefix }}
+          LOCAL_DIR: ${{ needs.setup.outputs.models_local_dir }}
+        run: |
+          echo "📤 Enviando artefatos para s3://$BUCKET/$PREFIX/..."
+
+          aws s3 cp "$LOCAL_DIR/lstm_stock_model.h5" \
+            "s3://$BUCKET/$PREFIX/lstm_stock_model.h5" \
+            --storage-class STANDARD_IA
+
+          aws s3 cp "$LOCAL_DIR/scaler.pkl" \
+            "s3://$BUCKET/$PREFIX/scaler.pkl" \
+            --storage-class STANDARD_IA
+
+          echo "✅ Upload concluído. Listando:"
+          aws s3 ls "s3://$BUCKET/$PREFIX/" --human-readable
+
+  terraform_apply:
+    needs: [setup, build_push_ecr, upload_models_s3]
+    if: ${{ needs.build_push_ecr.result == 'success' && needs.upload_models_s3.result == 'success' && needs.setup.outputs.tf_destroy != 'true' }}
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ needs.setup.outputs.aws_region }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.setup.outputs.python_version }}
+
+      - name: Create S3 Backend Bucket if not exists
+        run: |
+          BUCKET_NAME="${{ needs.setup.outputs.s3_bucket }}"
+          REGION="${{ needs.setup.outputs.backend_region }}"
+          
+          echo "🔍 Verificando se o bucket $BUCKET_NAME existe..."
+          
+          if aws s3 ls "s3://$BUCKET_NAME" 2>&1 | grep -q 'NoSuchBucket'; then
+            echo "📦 Bucket não existe. Criando..."
+            
+            if [ "$REGION" = "us-east-1" ]; then
+              aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION"
+            else
+              aws s3api create-bucket \
+                --bucket "$BUCKET_NAME" \
+                --region "$REGION" \
+                --create-bucket-configuration LocationConstraint="$REGION"
+            fi
+            
+            echo "🔐 Habilitando versionamento..."
+            aws s3api put-bucket-versioning \
+              --bucket "$BUCKET_NAME" \
+              --versioning-configuration Status=Enabled
+            
+            echo "🔒 Habilitando criptografia..."
+            aws s3api put-bucket-encryption \
+              --bucket "$BUCKET_NAME" \
+              --server-side-encryption-configuration '{
+                "Rules": [{
+                  "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "AES256"
+                  }
+                }]
+              }'
+            
+            echo "🚫 Bloqueando acesso público..."
+            aws s3api put-public-access-block \
+              --bucket "$BUCKET_NAME" \
+              --public-access-block-configuration \
+                BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+            
+            echo "✅ Bucket $BUCKET_NAME criado e configurado com sucesso!"
+          else
+            echo "✅ Bucket $BUCKET_NAME já existe"
+          fi
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Create Terraform Backend Configuration
+        run: |
+          cd infra
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket  = "${{ needs.setup.outputs.s3_bucket }}"
+              key     = "${{ needs.setup.outputs.s3_key }}"
+              region  = "${{ needs.setup.outputs.backend_region }}"
+              encrypt = true
+            }
+          }
+          EOF
+          echo "✅ backend.tf criado com sucesso"
+          cat backend.tf
+
+      - name: Terraform Init
+        run: |
+          cd infra
+          terraform init
+
+      - name: Terraform Plan
+        run: |
+          cd infra
+          terraform plan -input=false \
+            -var-file="inventories/prod.tfvars" \
+            -var="aws_region=${{ needs.setup.outputs.aws_region }}" \
+            -var="ecr_image_tag=${{ needs.setup.outputs.image_tag }}"
+
+      - name: Terraform Apply
+        run: |
+          cd infra
+          terraform apply -auto-approve -input=false \
+            -var-file="inventories/prod.tfvars" \
+            -var="aws_region=${{ needs.setup.outputs.aws_region }}" \
+            -var="ecr_image_tag=${{ needs.setup.outputs.image_tag }}"
+
+      - name: Show outputs
+        run: |
+          cd infra
+          echo "🌐 URL do API Gateway:"
+          terraform output -raw api_gateway_url || true
+
+  deploy_ecs:
+    needs: [setup, terraform_apply]
+    if: ${{ needs.terraform_apply.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ needs.setup.outputs.aws_region }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Register new Task Definition revision
+        id: task_def
+        env:
+          CLUSTER: ${{ needs.setup.outputs.ecs_cluster }}
+          SERVICE: ${{ needs.setup.outputs.ecs_service }}
+          REGION:  ${{ needs.setup.outputs.aws_region }}
+          ACCOUNT: ${{ needs.setup.outputs.aws_account_id }}
+          REPO:    ${{ needs.setup.outputs.ecr_repo }}
+          TAG:     ${{ needs.setup.outputs.image_tag }}
+        run: |
+          NEW_IMAGE="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:$TAG"
+
+          TASK_FAMILY=$(aws ecs describe-services \
+            --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].taskDefinition' --output text | \
+            sed 's|arn:.*task-definition/||' | sed 's|:[0-9]*$||')
+
+          NEW_TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_FAMILY" --query 'taskDefinition' | \
+            jq --arg img "$NEW_IMAGE" \
+              'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
+               .containerDefinitions[0].image = $img')
+
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+
+          echo "new_task_arn=$NEW_ARN" >> $GITHUB_OUTPUT
+          echo "✅ Nova definição de tarefa registrada: $NEW_ARN"
+
+      - name: Update ECS service with new task definition
+        env:
+          CLUSTER: ${{ needs.setup.outputs.ecs_cluster }}
+          SERVICE: ${{ needs.setup.outputs.ecs_service }}
+        run: |
+          aws ecs update-service \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE" \
+            --task-definition "${{ steps.task_def.outputs.new_task_arn }}" \
+            --force-new-deployment
+          echo "✅ Atualização do serviço ECS iniciada"
+
+      - name: Wait for service stability
+        env:
+          CLUSTER: ${{ needs.setup.outputs.ecs_cluster }}
+          SERVICE: ${{ needs.setup.outputs.ecs_service }}
+        run: |
+          echo "⏳ Aguardando estabilização do serviço (até 10 min)..."
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER" \
+            --services "$SERVICE"
+          echo "✅ Serviço estável e saudável!"
+
+  terraform_destroy:
+    needs: setup
+    if: ${{ needs.setup.outputs.tf_destroy == 'true' }}
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ needs.setup.outputs.aws_region }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.setup.outputs.python_version }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Create Terraform Backend Configuration
+        run: |
+          cd infra
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket  = "${{ needs.setup.outputs.s3_bucket }}"
+              key     = "${{ needs.setup.outputs.s3_key }}"
+              region  = "${{ needs.setup.outputs.backend_region }}"
+              encrypt = true
+            }
+          }
+          EOF
+          echo "✅ backend.tf criado com sucesso"
+
+      - name: Terraform Init
+        run: |
+          cd infra
+          terraform init
+
+      - name: Terraform Plan (Destroy)
+        run: |
+          cd infra
+          terraform plan -destroy -input=false \
+            -var-file="inventories/prod.tfvars" \
+            -var="aws_region=${{ needs.setup.outputs.aws_region }}"
+
+      - name: Terraform Destroy
+        run: |
+          cd infra
+          terraform destroy -auto-approve -input=false \
+            -var-file="inventories/prod.tfvars" \
+            -var="aws_region=${{ needs.setup.outputs.aws_region }}"
