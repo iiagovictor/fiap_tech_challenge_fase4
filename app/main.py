@@ -78,7 +78,7 @@ def root():
 @app.get(
     "/health",
     response_model=HealthResponse,
-    summary="Liveness / readiness probe",
+    summary="Verificação de saúde da API e status do modelo",
     tags=["Infraestrutura"],
 )
 def health_check() -> HealthResponse:
