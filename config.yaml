@@ -1,0 +1,24 @@
+setup:
+  python_version: "3.11"
+
+aws:
+  region: us-east-1
+
+ecr:
+  repository: lstm-stock-api
+
+ecs:
+  cluster: lstm-stock-api-prod-cluster
+  service: lstm-stock-api-prod-service
+
+models:
+  local_dir: models
+  s3_key_prefix: models
+
+terraform:
+  backend:
+    account_id: "197045787308"
+    s3_bucket: "lstm-stock-tf-state-197045787308"
+    key: "prod/terraform.tfstate"
+    region: us-east-1
+  destroy: false
