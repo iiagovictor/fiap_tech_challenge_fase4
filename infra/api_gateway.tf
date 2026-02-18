@@ -14,7 +14,7 @@ resource "aws_apigatewayv2_api" "main" {
   tags = { Name = local.name_prefix }
 }
 
-# Integration: HTTP_PROXY → ALB
+# Integração para rotas com caminho dinâmico: HTTP_PROXY → ALB
 resource "aws_apigatewayv2_integration" "alb" {
   api_id             = aws_apigatewayv2_api.main.id
   integration_type   = "HTTP_PROXY"
@@ -28,7 +28,17 @@ resource "aws_apigatewayv2_integration" "alb" {
   }
 }
 
-# Catch-all route → ALB
+# Integração para a rota raiz: HTTP_PROXY → ALB (sem {proxy} na URI)
+resource "aws_apigatewayv2_integration" "alb_root" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = "http://${aws_lb.main.dns_name}/"
+
+  payload_format_version = "1.0"
+}
+
+# Rota catch-all → ALB
 resource "aws_apigatewayv2_route" "proxy" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /{proxy+}"
@@ -38,7 +48,7 @@ resource "aws_apigatewayv2_route" "proxy" {
 resource "aws_apigatewayv2_route" "root" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /"
-  target    = "integrations/${aws_apigatewayv2_integration.alb.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.alb_root.id}"
 }
 
 # Default Stage (auto-deploy)
