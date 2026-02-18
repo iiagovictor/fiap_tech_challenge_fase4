@@ -1,7 +1,7 @@
 import matplotlib.dates as mdates
 import numpy as np
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout, Input
 import tensorflow as tf
 
 
