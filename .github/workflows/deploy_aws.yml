@@ -387,8 +387,17 @@ jobs:
       - name: Show outputs
         run: |
           cd infra
-          echo "🌐 URL do API Gateway:"
-          terraform output -raw api_gateway_url || true
+          API_URL=$(terraform output -raw api_gateway_url 2>/dev/null || echo "")
+          if [ -n "$API_URL" ]; then
+            echo "🌐 API Gateway URL: $API_URL"
+            echo "## 🚀 Deploy concluído" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| | |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| 🌐 **API** | $API_URL |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Não foi possível obter a URL do API Gateway"
+          fi
 
   deploy_ecs:
     needs: [setup, terraform_apply]
