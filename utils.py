@@ -52,6 +52,6 @@ def construcao_modelo(hp):
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=hp_lr),
         loss="Huber",  # Solução que funcionou para o erro
-        metrics=["mae"],
+        metrics=["mae", "mse"],
     )
     return model
