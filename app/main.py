@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.model import MODEL_LOADED, SEQ_LENGTH, predict_from_prices, predict_from_ticker
 from app.monitoring import (
@@ -35,7 +36,7 @@ async def lifespan(app: FastAPI):  # noqa: D401
 
 # Configurações da API
 app = FastAPI(
-    title="LSTM Stock Price Predictor",
+    title="LSTM Stock Price Predictor - TechChallenge FIAP (Fase 4)",
     description=(
         "API RESTful para previsão de preços de ações usando um modelo de "
         "deep learning LSTM treinado com dados do ITUB4 (Itaú Unibanco)."
@@ -69,6 +70,11 @@ async def count_requests(request: Request, call_next):
 
 
 # Rotas
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")
+
+
 @app.get(
     "/health",
     response_model=HealthResponse,
