@@ -111,6 +111,7 @@ jobs:
     needs: setup
     if: ${{ needs.setup.outputs.tf_destroy != 'true' }}
     runs-on: ubuntu-latest
+    environment: prod
     outputs:
       image_uri: ${{ steps.build.outputs.image_uri }}
     steps:
@@ -176,6 +177,7 @@ jobs:
     needs: setup
     if: ${{ needs.setup.outputs.tf_destroy != 'true' }}
     runs-on: ubuntu-latest
+    environment: prod
     outputs:
       models_bucket: ${{ steps.bucket.outputs.name }}
     steps:
