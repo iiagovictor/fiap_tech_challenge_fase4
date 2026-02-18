@@ -18,3 +18,7 @@ bloco_de_notas.txt
 # Arquivos parquet
 arquivos_parquet/
 *.parquet
+
+#Arquivos de turner
+tuner_results/
+**/tuner_results/
