@@ -148,6 +148,11 @@ jobs:
       - name: Create ECR repository (targeted apply)
         run: |
           cd infra
+          # Importa o repositório caso já exista na AWS (evita erro de recurso duplicado)
+          terraform import \
+            -var-file="inventories/prod.tfvars" \
+            -var="aws_region=${{ needs.setup.outputs.aws_region }}" \
+            aws_ecr_repository.main ${{ needs.setup.outputs.ecr_repo }} 2>/dev/null || true
           terraform apply -auto-approve -input=false \
             -target=aws_ecr_repository.main \
             -var-file="inventories/prod.tfvars" \
