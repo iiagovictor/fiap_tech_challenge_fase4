@@ -23,7 +23,7 @@ def criar_sequencias(data, window_size):
     X = []
     y = []
     for i in range(len(data) - window_size):
-        X.append(data[i : (i + window_size), :])
+        X.append(data[i : (i + window_size), :])  # noqa: E203
         y.append(data[i + window_size, 0])
     return np.array(X), np.array(y)
 
