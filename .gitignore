@@ -1,6 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
+*.pyc
 *$py.class
 
 # C extensions
@@ -82,6 +83,19 @@ target/
 profile_default/
 ipython_config.py
 
+#Arquivos de turner
+tuner_results/
+**/tuner_results/
+
+
+# Bloco de Notas Temporário
+# Será excluido ao finalizar o Projeto
+bloco_de_notas.txt
+
+# Arquivos parquet
+arquivos_parquet/
+*.parquet
+
 # pyenv
 #   For a library or package, you might want to ignore these files since the code is
 #   intended to run in multiple environments; otherwise, check them in:
@@ -138,9 +152,11 @@ celerybeat.pid
 .env
 .envrc
 .venv
+.venv/
 env/
 venv/
 ENV/
+env/
 env.bak/
 venv.bak/
 
