@@ -4,6 +4,7 @@ annotated-types==0.7.0
 anyio==4.12.1
 asttokens==3.0.1
 astunparse==1.6.3
+autopep8==2.3.2
 beautifulsoup4==4.14.3
 boto3==1.42.51
 botocore==1.42.53
@@ -20,6 +21,7 @@ debugpy==1.8.20
 decorator==5.2.1
 executing==2.2.1
 fastapi==0.129.0
+flake8==7.3.0
 flatbuffers==25.12.19
 fonttools==4.61.1
 frozendict==2.4.7
@@ -47,10 +49,12 @@ markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 matplotlib==3.10.8
 matplotlib-inline==0.2.1
+mccabe==0.7.0
 mdurl==0.1.2
 ml_dtypes==0.5.4
 multitasking==0.0.12
 namex==0.1.0
+nbqa==1.9.1
 nest-asyncio==1.6.0
 numpy==2.4.2
 opt_einsum==3.4.0
@@ -68,9 +72,11 @@ protobuf==6.33.5
 psutil==7.2.2
 pure_eval==0.2.3
 pyarrow==23.0.1
+pycodestyle==2.14.0
 pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
+pyflakes==3.4.0
 Pygments==2.19.2
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
@@ -93,6 +99,8 @@ tensorboard-data-server==0.7.2
 tensorflow==2.20.0
 termcolor==3.3.0
 threadpoolctl==3.6.0
+tokenize_rt==6.2.0
+tomli==2.4.0
 tornado==6.5.4
 traitlets==5.14.3
 typing-inspection==0.4.2

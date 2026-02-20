@@ -8,7 +8,8 @@ logger = logging.getLogger(__name__)
 
 @contextmanager
 def track_request(endpoint: str) -> Generator[None, None, None]:
-    """Gerenciador de contexto para medir a latência de cada requisição e emitir um log estruturado."""
+    """Gerenciador de contexto para medir a latência de cada
+    requisição e emitir um log estruturado."""
     start = time.perf_counter()
     try:
         yield
@@ -27,7 +28,7 @@ def log_prediction(
 ) -> None:
     """Emite uma linha de log estruturada após cada previsão."""
     logger.info(
-        "prediction | endpoint=%s ticker=%s days_ahead=%d prices=%s latency_ms=%.1f",
+        "prediction | endpoint=%s ticker=%s days_ahead=%d prices=%s latency_ms=%.1f",  # noqa: E501
         endpoint,
         ticker or "N/A",
         days_ahead,
