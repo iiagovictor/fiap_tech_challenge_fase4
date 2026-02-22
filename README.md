@@ -30,7 +30,7 @@ Ou com Docker:
 docker compose up --build
 ```
 
-> ⚠️ Execute o notebook `pre-work.ipynb` antes para gerar os artefatos do modelo.
+> ⚠️ Execute os notebooks em `Notebooks/` para treinar o modelo e gerar `model.h5`, para deployar em produção.
 
 ---
 
