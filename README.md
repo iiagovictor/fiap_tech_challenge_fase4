@@ -1,1 +1,45 @@
-# fiap_tech_challenge_fase4
+# 📈 LSTM Stock Price Predictor - FIAP Tech Challenge - Fase 4
+
+API de previsão de preços de ações com modelo LSTM treinado no histórico do **ITUB4.SA (Itaú Unibanco)**.
+
+---
+
+## Stack
+
+- **ML**: TensorFlow / Keras (LSTM)
+- **API**: FastAPI + Uvicorn
+- **Infra**: AWS ECS Fargate, ECR, S3, API Gateway
+- **IaC**: Terraform
+- **CI/CD**: GitHub Actions
+
+---
+
+## Como executar localmente
+
+```bash
+# Instalar dependências
+pip install -r requirements.txt
+
+# Iniciar a API
+uvicorn app.main:app --reload
+```
+
+Ou com Docker:
+
+```bash
+docker compose up --build
+```
+
+> ⚠️ Execute o notebook `pre-work.ipynb` antes para gerar os artefatos do modelo.
+
+---
+
+## Endpoints
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/health` | Status da API e do modelo |
+| `POST` | `/predict` | Previsão a partir de preços históricos |
+| `POST` | `/predict/ticker` | Previsão por ticker (ex: `ITUB4.SA`) |
+
+Documentação interativa disponível em **`/docs`**.
