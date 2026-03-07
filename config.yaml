@@ -21,4 +21,4 @@ terraform:
     s3_bucket: "lstm-stock-tf-state-197045787308"
     key: "prod/terraform.tfstate"
     region: us-east-1
-  destroy: false
+  destroy: true
